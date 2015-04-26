@@ -1,0 +1,70 @@
+---
+title: "PML-Assignment"
+author: "Shyam Naren"
+date: "Sunday, April 26, 2015"
+output: html_document
+---
+
+Load All Packages
+
+```{r}
+
+library(caret)
+library(Hmisc)
+library(data.table)
+library(kernlab)
+
+```
+
+Load Sample Data & Test Data (data to be predicted)
+```{r}
+
+setInternet2(TRUE)
+sample_data_url <- "https://d396qusza40orc.cloudfront.net/predmachlearn/pml-training.csv"
+sample_data <- fread(sample_data_url)
+
+test_data_url <- "https://d396qusza40orc.cloudfront.net/predmachlearn/pml-testing.csv"
+test_data <- fread(test_data_url)
+```
+Use all Belt, arm, dumbbell, and forearm variables that don't have NAs in the test data as predictors
+```{r}
+
+VarStatus <- sapply(test_data, function (x) any(is.na(x) | x == ""))
+PredictorStatus <- !VarStatus & grepl("belt|[^(fore)]arm|dumbbell|forearm", names(VarStatus))
+PredictorList <- names(VarStatus)[PredictorStatus]
+
+```
+#Add classe variable as well & subset sample & test data to include selected predictors
+
+```{r}
+PredictorList<-c(PredictorList,"classe")
+sample_data <- sample_data[, PredictorList, with=FALSE]
+test_data <- test_data[, PredictorList, with=FALSE]
+
+sample_data$classe<-as.factor(sample_data$classe)
+test_data$classe<-as.factor(test_data$classe)
+```
+Set up & Train SVM 
+```{r}
+sigDist <- sigest(classe ~ ., data = Train_data, frac = 1)
+### creating a grid of two tuning parameters, .sigma comes from the earlier line. we are trying to find best value of .C
+svmTuneGrid <- data.frame(.sigma = sigDist[1], .C = 2^(-4:10))
+
+model <- train(classe ~ .,
+           data = Train_data,
+           method = "svmRadial",
+           preProc = c("center", "scale"),
+           tuneGrid = svmTuneGrid,
+           trControl = trainControl(method = "repeatedcv", repeats = 5, 
+                                    classProbs =  TRUE))
+```
+
+Test Model on probe data to get a sense of Out of Sample Error
+```{r}
+pred <- predict(model,Probe_data[,1:52])
+cmatrix <- confusionMatrix(pred,Probe_data$classe)
+```
+Confusion Matrix shows 100% accuracy, so try the model on test data
+```{r}
+pred <- predict(model,test_data[,1:52])
+```
